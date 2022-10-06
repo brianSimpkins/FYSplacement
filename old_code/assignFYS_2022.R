@@ -167,7 +167,7 @@ prefsL2$rank<-paste("Pref",prefsL2$time,sep=".")
 
 ## keep: First, Preferred, Last, Round, Gender, IPEDS...., First.Gen, Major.Interest..by.Division
 ##	Athelete, classnum, rank, CX.ID, newzip
-ids<-c("CX.ID","First","Preferred","Last", "Round","Gender","IPEDS.Classification","First.Gen","Major.Interest.by.Division","Athlete", "newzip" )
+ids<-c("ï..CX.ID","First","Preferred","Last", "Round","Gender","IPEDS.Classification","First.Gen","Major.Interest.by.Division","Athlete", "newzip" )
 prefsL3<-prefsL2[,c(ids,"classnum","rank")]
 prefs2<-reshape(data=prefsL3, idvar=ids, direction="wide", v.names="classnum", timevar="rank")
 

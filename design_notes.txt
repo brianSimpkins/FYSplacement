@@ -1,0 +1,3 @@
+- All classes will have the same number of students, or 1 fewer
+
+- Should students who didn't fill out the form be completely excluded? Should they be placed at random?
