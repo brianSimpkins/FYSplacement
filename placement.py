@@ -4,7 +4,6 @@ import pandas as pd
 import unicodedata as ud
 import math
 from random import sample
-import tqdm
 
 class Pitzer_Placement:
 
@@ -14,7 +13,7 @@ class Pitzer_Placement:
         df = pd.read_csv(filepath)
 
         # Separate forms by completion
-        completed_forms = df[df["Completed Form"] != "No"]
+        self.completed_forms = df[df["Completed Form"] != "No"]
         incomplete_forms = df[df["Completed Form"] != "Yes"]
         num_students = len(df)
 
@@ -22,19 +21,19 @@ class Pitzer_Placement:
         del df
 
         # Convert all classes to normalized unicode
-        completed_forms["Preference 1"] = [ud.normalize("NFKC", x) for x in completed_forms["Preference 1"]]
-        completed_forms["Preference 2"] = [ud.normalize("NFKC", x) for x in completed_forms["Preference 2"]]
-        completed_forms["Preference 3"] = [ud.normalize("NFKC", x) for x in completed_forms["Preference 3"]]
-        completed_forms["Preference 4"] = [ud.normalize("NFKC", x) for x in completed_forms["Preference 4"]]
-        completed_forms["Preference 5"] = [ud.normalize("NFKC", x) for x in completed_forms["Preference 5"]]
+        self.completed_forms["Preference 1"] = [ud.normalize("NFKC", x) for x in self.completed_forms["Preference 1"]]
+        self.completed_forms["Preference 2"] = [ud.normalize("NFKC", x) for x in self.completed_forms["Preference 2"]]
+        self.completed_forms["Preference 3"] = [ud.normalize("NFKC", x) for x in self.completed_forms["Preference 3"]]
+        self.completed_forms["Preference 4"] = [ud.normalize("NFKC", x) for x in self.completed_forms["Preference 4"]]
+        self.completed_forms["Preference 5"] = [ud.normalize("NFKC", x) for x in self.completed_forms["Preference 5"]]
 
         # Gather a list of all classes
         classes = set()
-        classes.update(completed_forms["Preference 1"])
-        classes.update(completed_forms["Preference 2"])
-        classes.update(completed_forms["Preference 3"])
-        classes.update(completed_forms["Preference 4"])
-        classes.update(completed_forms["Preference 5"])
+        classes.update(self.completed_forms["Preference 1"])
+        classes.update(self.completed_forms["Preference 2"])
+        classes.update(self.completed_forms["Preference 3"])
+        classes.update(self.completed_forms["Preference 4"])
+        classes.update(self.completed_forms["Preference 5"])
 
         # Determine class size
         self.large_class_size = math.ceil(num_students / len(classes))
@@ -45,18 +44,18 @@ class Pitzer_Placement:
         # Build class - preference dictionary
         self.class_pref = {x: {"1":[], "n1":0, "2":[], "n2":0, "3":[], "n3":0, "4":[], "n4":0, "5":[], "n5":0} for x in classes}
 
-        for i in range(len(completed_forms["CX ID"])):
+        for i in range(len(self.completed_forms["CX ID"])):
             # add student id to self.class_pref dict
-            self.class_pref[completed_forms["Preference 1"].iloc[i]]["1"].append(completed_forms["CX ID"].iloc[i])
-            self.class_pref[completed_forms["Preference 1"].iloc[i]]["n1"] += 1
-            self.class_pref[completed_forms["Preference 2"].iloc[i]]["n2"] += 1
-            self.class_pref[completed_forms["Preference 2"].iloc[i]]["2"].append(completed_forms["CX ID"].iloc[i])
-            self.class_pref[completed_forms["Preference 3"].iloc[i]]["n3"] += 1
-            self.class_pref[completed_forms["Preference 3"].iloc[i]]["3"].append(completed_forms["CX ID"].iloc[i])
-            self.class_pref[completed_forms["Preference 4"].iloc[i]]["n4"] += 1
-            self.class_pref[completed_forms["Preference 4"].iloc[i]]["4"].append(completed_forms["CX ID"].iloc[i])
-            self.class_pref[completed_forms["Preference 5"].iloc[i]]["n5"] += 1
-            self.class_pref[completed_forms["Preference 5"].iloc[i]]["5"].append(completed_forms["CX ID"].iloc[i])
+            self.class_pref[self.completed_forms["Preference 1"].iloc[i]]["1"].append(self.completed_forms["CX ID"].iloc[i])
+            self.class_pref[self.completed_forms["Preference 1"].iloc[i]]["n1"] += 1
+            self.class_pref[self.completed_forms["Preference 2"].iloc[i]]["n2"] += 1
+            self.class_pref[self.completed_forms["Preference 2"].iloc[i]]["2"].append(self.completed_forms["CX ID"].iloc[i])
+            self.class_pref[self.completed_forms["Preference 3"].iloc[i]]["n3"] += 1
+            self.class_pref[self.completed_forms["Preference 3"].iloc[i]]["3"].append(self.completed_forms["CX ID"].iloc[i])
+            self.class_pref[self.completed_forms["Preference 4"].iloc[i]]["n4"] += 1
+            self.class_pref[self.completed_forms["Preference 4"].iloc[i]]["4"].append(self.completed_forms["CX ID"].iloc[i])
+            self.class_pref[self.completed_forms["Preference 5"].iloc[i]]["n5"] += 1
+            self.class_pref[self.completed_forms["Preference 5"].iloc[i]]["5"].append(self.completed_forms["CX ID"].iloc[i])
 
         # Convert to dataframe
         self.class_pref = pd.DataFrame(self.class_pref).T
@@ -75,7 +74,35 @@ class Pitzer_Placement:
         self.student_assignments = {}
 
     def place_students(self):
-        self.place_recursive(self.class_pref.copy())
+        min_student_assignments = {}
+        min_student_happiness = 5
+        min_worst_placement = 5
+
+        # iterate 500 times, make sure everyone is happy!
+        for i in range(500):
+            student_assigments = self.place_students(self.class_pref.copy())
+            happiness, worst_placement = self.get_score(student_assigments)
+            if worst_placement <= min_worst_placement and happiness <= min_student_happiness:
+                min_student_assignments = student_assigments
+                min_worst_placement = worst_placement
+                min_student_happiness = happiness
+        
+        return min_student_assignments, min_student_happiness, min_worst_placement
+
+    # get a score for how "happy" people are in their classes
+    def get_score(self, student_assignments):
+        total = 0
+        worst_placement = 0
+
+        for student, course in student_assignments.items():
+            prefs = self.completed_forms.loc[self.completed_forms["CX ID"] == student].values.tolist()[0][-5:]
+            assigned_class = student_assignments[student]
+            total += prefs.index(assigned_class)
+
+            worst_placement = max(worst_placement, prefs.index(assigned_class))
+        
+        ave_happiness = total / self.num_students
+        return ave_happiness, worst_placement
 
     # If our ordering of classes means one can't be filled, swap it with the one above it
     def swap_up(self, df, i1):
@@ -95,7 +122,7 @@ class Pitzer_Placement:
         self.student_assignments.clear()
 
         # Iterate through the classes, starting with the least popular
-        for class_num, curr_class in enumerate(tqdm.tqdm(class_preferences.index)):
+        for class_num, curr_class in enumerate(class_preferences.index):
 
             # Determine the class size - less popular classes will have the smaller class sizes
             if num_small_classes > 0:
