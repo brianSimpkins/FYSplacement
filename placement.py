@@ -15,7 +15,7 @@ class Pitzer_Placement:
         # Separate forms by completion
         self.completed_forms = df[df["Completed Form"] != "No"]
         incomplete_forms = df[df["Completed Form"] != "Yes"]
-        num_students = len(df)
+        self.num_students = len(self.completed_forms)
 
         # Remove df to free memory
         del df
@@ -36,9 +36,9 @@ class Pitzer_Placement:
         classes.update(self.completed_forms["Preference 5"])
 
         # Determine class size
-        self.large_class_size = math.ceil(num_students / len(classes))
+        self.large_class_size = math.ceil(self.num_students / len(classes))
         self.small_class_size = self.large_class_size - 1
-        self.small_class_num = len(classes) * self.large_class_size - num_students
+        self.small_class_num = len(classes) * self.large_class_size - self.num_students
 
 
         # Build class - preference dictionary
@@ -80,14 +80,16 @@ class Pitzer_Placement:
 
         # iterate 500 times, make sure everyone is happy!
         for i in range(500):
-            student_assigments = self.place_students(self.class_pref.copy())
+            student_assigments = self.place_recursive(self.class_pref.copy())
             happiness, worst_placement = self.get_score(student_assigments)
             if worst_placement <= min_worst_placement and happiness <= min_student_happiness:
                 min_student_assignments = student_assigments
                 min_worst_placement = worst_placement
                 min_student_happiness = happiness
         
-        return min_student_assignments, min_student_happiness, min_worst_placement
+        self.student_assignments = min_student_assignments
+
+        return min_student_happiness, min_worst_placement
 
     # get a score for how "happy" people are in their classes
     def get_score(self, student_assignments):
@@ -119,7 +121,7 @@ class Pitzer_Placement:
 
         num_small_classes = self.small_class_num
 
-        self.student_assignments.clear()
+        student_assignments = {}
 
         # Iterate through the classes, starting with the least popular
         for class_num, curr_class in enumerate(class_preferences.index):
@@ -137,21 +139,22 @@ class Pitzer_Placement:
                 # Get all students with the current preference level
                 curr_students = class_preferences.loc[curr_class][str(curr_preference)]
                 # Remove students who have already been placed
-                curr_students = [student for student in curr_students if student not in self.student_assignments]
+                curr_students = [student for student in curr_students if student not in student_assignments]
                 # If there are more students at this preference level than we are looking for
                 if len(curr_students) > curr_size:
                     curr_students = sample(curr_students, curr_size)
                 
                 for student in curr_students:
                     # Assign student
-                    self.student_assignments[student] = curr_class
+                    student_assignments[student] = curr_class
                     # Fill one slot
                     curr_size -= 1
                 
                 curr_preference += 1
             
-            # If we went through all preferences and the class still isn't filled
+            # If we went through all preferences and the class still isn't filled, swap the class up and try again!
             if curr_size > 0:
-                # swap class up in preference order
-                return self.place_students( self.swap_up(class_preferences, class_num) )
-                # If one of their preferred classes contains a student that wants this class, substitute the students
+                class_preferences = class_preferences.iloc[np.r_[0: class_num - 1, class_num, class_num - 1, class_num + 1 : len(class_preferences)]]
+                return self.place_recursive(class_preferences)
+        
+        return student_assignments
