@@ -7,6 +7,13 @@ import placement as pp
 
 from os.path import exists
 
+class WorkerThread(qc.QThread):
+    def __init__(self, place_class):
+        qc.QThread.__init__(self)
+        self.place_class = place_class
+    def run(self):
+        self.place_class.place_students()
+
 class Placement_Gui(qw.QMainWindow):
 
     def __init__(self):
@@ -32,8 +39,8 @@ class Placement_Gui(qw.QMainWindow):
         layout = qw.QGridLayout()
 
         # title at the top of the screen
-        title = qw.QLabel("Pitzer FYS")
-        title.setFont(qg.QFont("Times", 20, 2))
+        title = qw.QLabel("Pitzer FYS Placement")
+        title.setFont(qg.QFont("Times", 18, 2))
 
         # anndata label
         form = qw.QLabel("Preference form filepath:")
@@ -41,6 +48,13 @@ class Placement_Gui(qw.QMainWindow):
 
         self.form_box = qw.QLineEdit(self)
         self.form_box.setFont(qg.QFont("Times", 11))
+
+        # anndata label
+        output = qw.QLabel("Save location:")
+        output.setFont(qg.QFont("Times", 11))
+
+        self.output_box = qw.QLineEdit(self)
+        self.output_box.setFont(qg.QFont("Times", 11))
 
         dem1 = qw.QLabel("Demographic rule 1:")
         dem1.setFont(qg.QFont("Times", 11))
@@ -66,12 +80,6 @@ class Placement_Gui(qw.QMainWindow):
         self.dem4_box = qw.QLineEdit(self)
         self.dem4_box.setFont(qg.QFont("Times", 11))
 
-        dem5 = qw.QLabel("Demographic rule 5:")
-        dem5.setFont(qg.QFont("Times", 11))
-
-        self.dem5_box = qw.QLineEdit(self)
-        self.dem5_box.setFont(qg.QFont("Times", 11))
-
         # run button
         self.run_button = qw.QPushButton("Run")
         self.run_button.clicked.connect(self.run_button_press)
@@ -83,20 +91,20 @@ class Placement_Gui(qw.QMainWindow):
         layout.addWidget(form, 1, 0, 1, 3)
         layout.addWidget(self.form_box, 1, 2, 1, 3)
 
-        layout.addWidget(dem1, 2, 0, 1, 3)
-        layout.addWidget(self.dem1_box, 2, 4)
+        layout.addWidget(output, 2, 0, 1, 3)
+        layout.addWidget(self.output_box, 2, 2, 1, 3)
 
-        layout.addWidget(dem2, 3, 0, 1, 3)
-        layout.addWidget(self.dem2_box, 3, 4)
+        layout.addWidget(dem1, 3, 0, 1, 3)
+        layout.addWidget(self.dem1_box, 3, 4)
 
-        layout.addWidget(dem3, 4, 0, 1, 3)
-        layout.addWidget(self.dem3_box, 4, 4)
+        layout.addWidget(dem2, 4, 0, 1, 3)
+        layout.addWidget(self.dem2_box, 4, 4)
 
-        layout.addWidget(dem4, 5, 0, 1, 3)
-        layout.addWidget(self.dem4_box, 5, 4)
+        layout.addWidget(dem3, 5, 0, 1, 3)
+        layout.addWidget(self.dem3_box, 5, 4)
 
-        layout.addWidget(dem5, 6, 0, 1, 3)
-        layout.addWidget(self.dem5_box, 6, 4)
+        layout.addWidget(dem4, 6, 0, 1, 3)
+        layout.addWidget(self.dem4_box, 6, 4)
 
         layout.addWidget(self.run_button, 7, 0, 1, 5, qc.Qt.AlignCenter)
 
@@ -117,21 +125,33 @@ class Placement_Gui(qw.QMainWindow):
 
 
     def run_button_press(self):
-        newWindow = qw.QMessageBox(self.wid)
+        self.newWindow = qw.QMessageBox(self.wid)
         if self.form_box.text() == "":
-            newWindow.setText("Please input a filepath for the placement forms")
-            newWindow.exec()
+            self.newWindow.setText("Please input a filepath for the placement forms")
+            self.newWindow.exec()
         elif not exists(self.form_box.text()):
-            newWindow.setText("The inputted filepath for the placement forms is invalid")
-            newWindow.exec()
+            self.newWindow.setText("The inputted filepath for the placement forms is invalid")
+            self.newWindow.exec()
+        elif self.output_box.text() == "":
+            self.newWindow.setText("Please input a filepath for the placement forms")
+            self.newWindow.exec()
         else: 
-            newWindow.setText("Running in progress, with placement data from \'" + self.form_box.text() + "\'")
-            newWindow.exec()
+            self.newWindow.setText("Running in progress, please wait")
             placer = pp.Pitzer_Placement(self.form_box.text())
-            student_happiness, worst_placement = placer.place_students()
-            outputWindow = qw.QMessageBox(self.wid)
-            outputWindow.setText(f"The worst placement used a student's {(worst_placement + 1)} preference. On average, each student was placed with their {(student_happiness + 1):.2f} preference.")
-            outputWindow.exec()
+            self.workerThread = WorkerThread(placer)
+            self.workerThread.finished.connect(self.end_thread)
+            self.workerThread.start()
+            self.newWindow.exec()
+    
+    def end_thread(self):
+        self.workerThread.place_class.save_assignments(self.output_box.text())
+
+        self.workerThread.deleteLater()
+
+        self.newWindow.close()
+        finalWindow = qw.QMessageBox(self.wid)
+        finalWindow.setText("Output saved!")
+        finalWindow.exec()
     
 if __name__ == '__main__':
     app = qw.QApplication(sys.argv)

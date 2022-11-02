@@ -3,13 +3,13 @@ import numpy as np
 import pandas as pd
 import unicodedata as ud
 import math
-from random import sample
+from random import sample, shuffle
+from collections import defaultdict
 
 class Pitzer_Placement:
 
     def __init__(self, filepath):
         # Now let's collect our data
-        student_data = "C:/Users/Brian/Documents/2022Fall/FYSplacement/data/FYS Fall 2022 Results - Active Commits 20220712-180011_deidentified.csv"
         df = pd.read_csv(filepath)
 
         # Separate forms by completion
@@ -73,13 +73,21 @@ class Pitzer_Placement:
         # Add placed students to a set that keeps track of students who can't be placed anymore, and their assigned class
         self.student_assignments = {}
 
+    def save_assignments(self, filepath):
+        output = self.completed_forms.drop(columns = self.completed_forms.columns[-5:])
+        new_col = output["CX ID"].apply(lambda x : self.student_assignments[x])
+        output.insert(1, "Assignment", new_col)
+        output.sort_values(by = ["Assignment"], inplace = True)
+        output.to_csv(path_or_buf = (filepath + "/FYS_StudentAssignments.csv"), index = False)
+        
+
     def place_students(self):
         min_student_assignments = {}
         min_student_happiness = 5
         min_worst_placement = 5
 
-        # iterate 500 times, make sure everyone is happy!
-        for i in range(500):
+        # iterate 100 times, make sure everyone is happy!
+        for i in range(100):
             student_assigments = self.place_recursive(self.class_pref.copy())
             happiness, worst_placement = self.get_score(student_assigments)
             if worst_placement <= min_worst_placement and happiness <= min_student_happiness:
@@ -126,34 +134,74 @@ class Pitzer_Placement:
         # Iterate through the classes, starting with the least popular
         for class_num, curr_class in enumerate(class_preferences.index):
 
+            # Keep track of gender balance in class
+            gender_map = defaultdict(int)
+
             # Determine the class size - less popular classes will have the smaller class sizes
             if num_small_classes > 0:
-                curr_size = self.small_class_size
+                remaining_size = self.small_class_size
                 num_small_classes -= 1
             else:
-                curr_size = self.large_class_size
+                remaining_size = self.large_class_size
 
             # Give open spots to students who requested, giving greater weight to higher preference
             curr_preference = 1
-            while curr_size > 0 and curr_preference <= 5:
+            while remaining_size > 0 and curr_preference <= 5:
+
                 # Get all students with the current preference level
                 curr_students = class_preferences.loc[curr_class][str(curr_preference)]
+
                 # Remove students who have already been placed
                 curr_students = [student for student in curr_students if student not in student_assignments]
+
                 # If there are more students at this preference level than we are looking for
-                if len(curr_students) > curr_size:
-                    curr_students = sample(curr_students, curr_size)
+                if len(curr_students) > remaining_size:
+
+                    # Give priority to non-majority genders to help balance class
+                    students_min_gender = []
+                    students_maj_gender = []
+                    
+                    # Loop through pool
+                    for student in curr_students:
+                        # Determine gender of student
+                        gender = self.completed_forms.loc[self.completed_forms["CX ID"] == student]["Gender"].values[0]
+                        
+                        # Determine majority gender in the class
+                        if len(gender_map.keys()) > 0:
+                            maj_gender = max(gender_map, key = gender_map.get)
+                        else:
+                            maj_gender = ""
+
+                        # Add student to either minority list or majority list
+                        if gender == maj_gender:
+                            students_maj_gender.append(student)
+                        else:
+                            students_min_gender.append(student)
+                        
+                        # update gender map (fine guess)
+                        gender_map[gender] += 1
+
+                    shuffle(students_min_gender)
+                    shuffle(students_maj_gender)
+                    
+                    # First place the students who aren't of the majority gender, then the rest
+                    curr_students = (students_min_gender + students_maj_gender)[:remaining_size]
                 
                 for student in curr_students:
+                    # Get gender
+                    gender = self.completed_forms.loc[self.completed_forms["CX ID"] == student]["Gender"].values[0]
+                    # Increment gender map
+                    gender_map[gender] += 1
+
                     # Assign student
                     student_assignments[student] = curr_class
                     # Fill one slot
-                    curr_size -= 1
+                    remaining_size -= 1
                 
                 curr_preference += 1
             
             # If we went through all preferences and the class still isn't filled, swap the class up and try again!
-            if curr_size > 0:
+            if remaining_size > 0:
                 class_preferences = class_preferences.iloc[np.r_[0: class_num - 1, class_num, class_num - 1, class_num + 1 : len(class_preferences)]]
                 return self.place_recursive(class_preferences)
         
