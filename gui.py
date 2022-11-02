@@ -4,6 +4,7 @@ import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 import PyQt5.QtGui as qg
 import placement as pp
+import copy
 
 from os.path import exists
 
