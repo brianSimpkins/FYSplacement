@@ -137,6 +137,9 @@ class Pitzer_Placement:
             # Keep track of gender balance in class
             gender_map = defaultdict(int)
 
+            # Keep track of racial balance in class
+            race_map = defaultdict(int)
+
             # Determine the class size - less popular classes will have the smaller class sizes
             if num_small_classes > 0:
                 remaining_size = self.small_class_size
@@ -158,13 +161,16 @@ class Pitzer_Placement:
                 if len(curr_students) > remaining_size:
 
                     # Give priority to non-majority genders to help balance class
-                    students_min_gender = []
-                    students_maj_gender = []
+                    students_min_gender_min_race = []
+                    students_min_gender_maj_race = []
+                    students_maj_gender_min_race = []
+                    students_maj_gender_maj_race = []
                     
                     # Loop through pool
                     for student in curr_students:
                         # Determine gender of student
                         gender = self.completed_forms.loc[self.completed_forms["CX ID"] == student]["Gender"].values[0]
+                        race = self.completed_forms.loc[self.completed_forms["CX ID"] == student]["IPEDS Classification"].values[0]
                         
                         # Determine majority gender in the class
                         if len(gender_map.keys()) > 0:
@@ -172,26 +178,44 @@ class Pitzer_Placement:
                         else:
                             maj_gender = ""
 
+                        # Determine majority race in the class
+                        if len(race_map.keys()) > 0:
+                            maj_race = max(race_map, key = race_map.get)
+                        else:
+                            maj_race = ""
+
                         # Add student to either minority list or majority list
                         if gender == maj_gender:
-                            students_maj_gender.append(student)
+                            if race == maj_race:
+                                students_maj_gender_maj_race.append(student)
+                            else:
+                                students_maj_gender_min_race.append(student)
                         else:
-                            students_min_gender.append(student)
+                            if race == maj_race:
+                                students_min_gender_maj_race.append(student)
+                            else:
+                                students_min_gender_min_race.append(student)
                         
                         # update gender map (fine guess)
                         gender_map[gender] += 1
 
-                    shuffle(students_min_gender)
-                    shuffle(students_maj_gender)
+                    shuffle(students_min_gender_min_race)
+                    shuffle(students_min_gender_maj_race)
+                    shuffle(students_maj_gender_min_race)
+                    shuffle(students_maj_gender_maj_race)
                     
                     # First place the students who aren't of the majority gender, then the rest
-                    curr_students = (students_min_gender + students_maj_gender)[:remaining_size]
+                    curr_students = (students_min_gender_min_race + students_min_gender_maj_race + students_maj_gender_min_race + students_maj_gender_maj_race)[:remaining_size]
                 
                 for student in curr_students:
                     # Get gender
                     gender = self.completed_forms.loc[self.completed_forms["CX ID"] == student]["Gender"].values[0]
+                    # Get race
+                    race = self.completed_forms.loc[self.completed_forms["CX ID"] == student]["IPEDS Classification"].values[0]
                     # Increment gender map
                     gender_map[gender] += 1
+                    # Increment race map
+                    race_map[race] += 1
 
                     # Assign student
                     student_assignments[student] = curr_class
