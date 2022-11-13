@@ -1,10 +1,11 @@
 # First let's set up some imports
+from importlib.resources import path
 import numpy as np
 import pandas as pd
 import unicodedata as ud
 import math
 from random import sample, shuffle
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 class Pitzer_Placement:
 
@@ -74,11 +75,16 @@ class Pitzer_Placement:
         self.student_assignments = {}
 
     def save_assignments(self, filepath):
-        output = self.completed_forms.drop(columns = self.completed_forms.columns[-5:])
-        new_col = output["CX ID"].apply(lambda x : self.student_assignments[x])
-        output.insert(1, "Assignment", new_col)
-        output.sort_values(by = ["Assignment"], inplace = True)
-        output.to_csv(path_or_buf = (filepath + "/FYS_StudentAssignments.csv"), index = False)
+        self.output = self.completed_forms.drop(columns = self.completed_forms.columns[-5:])
+        placement_col = self.output["CX ID"].apply(lambda x : self.student_assignments[x][0])
+        pref_col = self.output["CX ID"].apply(lambda x : self.student_assignments[x][1])
+        self.output.insert(1, "Assignment Preference", pref_col)
+        self.output.insert(1, "Assignment", placement_col)
+        self.output.sort_values(by = ["Assignment"], inplace = True)
+        self.output.to_csv(path_or_buf = (filepath + "/FYS_StudentAssignments.csv"), index = False)
+
+        self.get_stats()
+        self.stats.to_csv(path_or_buf = (filepath + "/FYS_AssignmentStats.csv"), index = False)
         
 
     def place_students(self):
@@ -86,8 +92,8 @@ class Pitzer_Placement:
         min_student_happiness = 5
         min_worst_placement = 5
 
-        # iterate 100 times, make sure everyone is happy!
-        for i in range(100):
+        # iterate 50 times, make sure everyone is happy!
+        for i in range(50):
             student_assigments = self.place_recursive(self.class_pref.copy())
             happiness, worst_placement = self.get_score(student_assigments)
             if worst_placement <= min_worst_placement and happiness <= min_student_happiness:
@@ -104,12 +110,11 @@ class Pitzer_Placement:
         total = 0
         worst_placement = 0
 
-        for student, course in student_assignments.items():
-            prefs = self.completed_forms.loc[self.completed_forms["CX ID"] == student].values.tolist()[0][-5:]
-            assigned_class = student_assignments[student]
-            total += prefs.index(assigned_class)
+        for (course, pref) in student_assignments.values():
 
-            worst_placement = max(worst_placement, prefs.index(assigned_class))
+            total += pref
+
+            worst_placement = max(worst_placement, pref)
         
         ave_happiness = total / self.num_students
         return ave_happiness, worst_placement
@@ -146,6 +151,23 @@ class Pitzer_Placement:
                 num_small_classes -= 1
             else:
                 remaining_size = self.large_class_size
+
+
+            # If there isn't enough interest to fill the class
+            if class_preferences.loc[curr_class]["top5"] < remaining_size:
+                # Make the biggest class possible
+                remaining_size = class_preferences.loc[curr_class]["top5"]
+
+                # Recalculate class sizes
+
+                # Remaining students after truncating this class
+                total_remaining_students = self.num_students - len(student_assignments) - remaining_size
+                # Remaining classes after this one
+                remaining_classes = len(class_preferences.index) - class_num - 1
+                # Large classes are total remaining students minus the number of remaining classes (after this one)
+                self.large_class_size = math.ceil(total_remaining_students / remaining_classes)
+                self.small_class_size = self.large_class_size - 1
+                self.small_class_num = remaining_classes * self.large_class_size - total_remaining_students
 
             # Give open spots to students who requested, giving greater weight to higher preference
             curr_preference = 1
@@ -218,7 +240,7 @@ class Pitzer_Placement:
                     race_map[race] += 1
 
                     # Assign student
-                    student_assignments[student] = curr_class
+                    student_assignments[student] = (curr_class, curr_preference)
                     # Fill one slot
                     remaining_size -= 1
                 
@@ -230,3 +252,18 @@ class Pitzer_Placement:
                 return self.place_recursive(class_preferences)
         
         return student_assignments
+
+    def get_stats(self, col_names = ["Gender", "IPEDS Classification", "First Gen", "Major Interest by Division"]):
+
+        self.stats = pd.DataFrame(list(dict.fromkeys(list(self.output["Assignment"])))).rename(columns = {0:'Class'})
+
+        def get_maj_prop(group):
+            counter = Counter(list(group))
+            majority_element, maj_count = counter.most_common()[0]
+            maj_prop = maj_count / counter.total() * 100
+            return f"{majority_element}: {maj_prop:.1f}%"
+
+        # for each demographic column
+        for col_name in col_names:
+            new_col = self.output.groupby("Assignment")[col_name].agg(lambda x: get_maj_prop(x))
+            self.stats[col_name] = new_col.values
