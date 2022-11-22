@@ -75,7 +75,7 @@ class Pitzer_Placement:
         self.student_assignments = {}
 
     def save_assignments(self, filepath):
-        self.output = self.completed_forms.drop(columns = self.completed_forms.columns[-5:])
+        self.output = self.completed_forms.copy()
         placement_col = self.output["CX ID"].apply(lambda x : self.student_assignments[x][0])
         pref_col = self.output["CX ID"].apply(lambda x : self.student_assignments[x][1])
         self.output.insert(1, "Assignment Preference", pref_col)
