@@ -8,7 +8,15 @@ import copy
 
 from os.path import exists
 
-class WorkerThread(qc.QThread):
+class UpdaterThread(qc.QThread):
+    def __init__(self, place_class):
+        qc.QThread.__init__(self)
+        self.place_class = place_class
+    def run(self):
+        self.place_class.place_students()
+
+
+class PlacerThread(qc.QThread):
     def __init__(self, place_class):
         qc.QThread.__init__(self)
         self.place_class = place_class
@@ -22,7 +30,7 @@ class Placement_Gui(qw.QMainWindow):
         self.title = "Pitzer FYS Placement"
         self.left = 100
         self.top = 100
-        self.width = 600
+        self.width = 900
         self.height = 300
         self.initUI()
     
@@ -44,7 +52,7 @@ class Placement_Gui(qw.QMainWindow):
         title.setFont(qg.QFont("Times", 18, 2))
 
         # anndata label
-        form = qw.QLabel("Preference form filepath:")
+        form = qw.QLabel("Input form filepath:")
         form.setFont(qg.QFont("Times", 11))
 
         self.form_box = qw.QLineEdit(self)
@@ -57,34 +65,24 @@ class Placement_Gui(qw.QMainWindow):
         self.output_box = qw.QLineEdit(self)
         self.output_box.setFont(qg.QFont("Times", 11))
 
-        dem1 = qw.QLabel("Demographic rule 1:")
-        dem1.setFont(qg.QFont("Times", 11))
-
-        self.dem1_box = qw.QLineEdit(self)
-        self.dem1_box.setFont(qg.QFont("Times", 11))
-
-        dem2 = qw.QLabel("Demographic rule 2:")
-        dem2.setFont(qg.QFont("Times", 11))
-
-        self.dem2_box = qw.QLineEdit(self)
-        self.dem2_box.setFont(qg.QFont("Times", 11))
-
-        dem3 = qw.QLabel("Demographic rule 3:")
-        dem3.setFont(qg.QFont("Times", 11))
-
-        self.dem3_box = qw.QLineEdit(self)
-        self.dem3_box.setFont(qg.QFont("Times", 11))
-        
-        dem4 = qw.QLabel("Demographic rule 4:")
-        dem4.setFont(qg.QFont("Times", 11))
-
-        self.dem4_box = qw.QLineEdit(self)
-        self.dem4_box.setFont(qg.QFont("Times", 11))
+        self.button_box = qw.QHBoxLayout()
 
         # run button
-        self.run_button = qw.QPushButton("Run")
+        self.run_button = qw.QPushButton("Initial Placement")
         self.run_button.clicked.connect(self.run_button_press)
-        self.run_button.setFont(qg.QFont("Times", 14))
+        self.run_button.setFont(qg.QFont("Times", 12))
+
+        # run button
+        self.update_button = qw.QPushButton("Update Placement")
+        self.update_button.clicked.connect(self.update_button_press)
+        self.update_button.setFont(qg.QFont("Times", 12))
+
+
+        self.button_box.addWidget(self.run_button)
+
+        self.button_box.addSpacing(50)
+
+        self.button_box.addWidget(self.update_button)
 
         # add widgets to the layout
         layout.addWidget(title, 0, 0, 1, 5, qc.Qt.AlignCenter)
@@ -95,19 +93,7 @@ class Placement_Gui(qw.QMainWindow):
         layout.addWidget(output, 2, 0, 1, 3)
         layout.addWidget(self.output_box, 2, 2, 1, 3)
 
-        layout.addWidget(dem1, 3, 0, 1, 3)
-        layout.addWidget(self.dem1_box, 3, 4)
-
-        layout.addWidget(dem2, 4, 0, 1, 3)
-        layout.addWidget(self.dem2_box, 4, 4)
-
-        layout.addWidget(dem3, 5, 0, 1, 3)
-        layout.addWidget(self.dem3_box, 5, 4)
-
-        layout.addWidget(dem4, 6, 0, 1, 3)
-        layout.addWidget(self.dem4_box, 6, 4)
-
-        layout.addWidget(self.run_button, 7, 0, 1, 5, qc.Qt.AlignCenter)
+        layout.addLayout(self.button_box, 7, 0, 1, 5, qc.Qt.AlignCenter)
 
         #layout.setRowStretch(5, 100)
         layout.setHorizontalSpacing(80)
@@ -125,6 +111,25 @@ class Placement_Gui(qw.QMainWindow):
         self.show()
 
 
+    def update_button_press(self):
+        self.newWindow = qw.QMessageBox(self.wid)
+        if self.form_box.text() == "":
+            self.newWindow.setText("Please input a filepath for the placement forms")
+            self.newWindow.exec()
+        elif not exists(self.form_box.text()):
+            self.newWindow.setText("The inputted filepath for the placement forms is invalid")
+            self.newWindow.exec()
+        elif self.output_box.text() == "":
+            self.newWindow.setText("Please input a valid location for the output")
+            self.newWindow.exec()
+        else: 
+            self.newWindow.setText("Running in progress, please wait")
+            placer = pp.Pitzer_Update_Placement(self.form_box.text())
+            self.workerThread = PlacerThread(placer)
+            self.workerThread.finished.connect(self.end_thread)
+            self.workerThread.start()
+            self.newWindow.exec()
+
     def run_button_press(self):
         self.newWindow = qw.QMessageBox(self.wid)
         if self.form_box.text() == "":
@@ -134,12 +139,12 @@ class Placement_Gui(qw.QMainWindow):
             self.newWindow.setText("The inputted filepath for the placement forms is invalid")
             self.newWindow.exec()
         elif self.output_box.text() == "":
-            self.newWindow.setText("Please input a filepath for the placement forms")
+            self.newWindow.setText("Please input a valid location for the output")
             self.newWindow.exec()
         else: 
             self.newWindow.setText("Running in progress, please wait")
             placer = pp.Pitzer_Placement(self.form_box.text())
-            self.workerThread = WorkerThread(placer)
+            self.workerThread = PlacerThread(placer)
             self.workerThread.finished.connect(self.end_thread)
             self.workerThread.start()
             self.newWindow.exec()
