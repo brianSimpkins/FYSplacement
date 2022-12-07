@@ -25,13 +25,13 @@ class PlacerThread(qc.QThread):
 
 class Placement_Gui(qw.QMainWindow):
 
-    def __init__(self):
+    def __init__(self, screen_width, screen_height):
         super().__init__()
         self.title = "Pitzer FYS Placement"
         self.left = 100
         self.top = 100
-        self.width = 900
-        self.height = 300
+        self.width = int(screen_width // 4)
+        self.height = int(screen_height // 4.5)
         self.initUI()
     
     def initUI(self):
@@ -161,5 +161,5 @@ class Placement_Gui(qw.QMainWindow):
     
 if __name__ == '__main__':
     app = qw.QApplication(sys.argv)
-    ex = Placement_Gui()
+    ex = Placement_Gui(app.primaryScreen().size().width(), app.primaryScreen().size().height())
     sys.exit(app.exec_())
