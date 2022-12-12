@@ -4,17 +4,8 @@ import PyQt5.QtWidgets as qw
 import PyQt5.QtCore as qc
 import PyQt5.QtGui as qg
 import placement as pp
-import copy
 
 from os.path import exists
-
-class UpdaterThread(qc.QThread):
-    def __init__(self, place_class):
-        qc.QThread.__init__(self)
-        self.place_class = place_class
-    def run(self):
-        self.place_class.place_students()
-
 
 class PlacerThread(qc.QThread):
     def __init__(self, place_class):
